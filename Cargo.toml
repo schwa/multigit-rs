@@ -1,0 +1,11 @@
+[package]
+name = "multigit-rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.87"
+clap = { version = "4.5.17", features = ["derive"] }
+serde = { version = "1.0.210", features = ["derive"] }
+shellexpand = "3.1.0"
+toml = "0.8.19"
