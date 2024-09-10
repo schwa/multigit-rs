@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
 use colored_markup::{println_markup, StyleSheet};
-use git2;
 use path_absolutize::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -148,7 +147,7 @@ impl Multigit {
             self.config.register(&std::env::current_dir()?)?;
         } else {
             for path in paths {
-                self.config.register(&path)?;
+                self.config.register(path)?;
             }
         }
         self.config.save()?;
@@ -160,7 +159,7 @@ impl Multigit {
             self.config.unregister(&std::env::current_dir()?)?;
         } else {
             for path in paths {
-                self.config.unregister(&path)?;
+                self.config.unregister(path)?;
             }
         }
         self.config.save()?;
