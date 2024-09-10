@@ -1,10 +1,11 @@
 use anyhow::{anyhow, Context, Result};
-use clap::{builder::styling::Style, Parser, Subcommand};
+use clap::{Parser, Subcommand};
+use colored_markup::{println_markup, StyleSheet};
 use git2;
 use path_absolutize::*;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, path::PathBuf};
-use colored_markup::{println_markup, StyleSheet};
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[clap(name = "My CLI Program")]
@@ -70,7 +71,11 @@ struct RepositoryEntry {
 
 #[derive(Debug, Deserialize, Serialize, Default)]
 struct Config {
-    repositories: std::collections::HashMap<String, RepositoryEntry>,
+    #[serde(default = "HashMap::new")]
+    repositories: HashMap<String, RepositoryEntry>,
+
+    #[serde(default = "HashSet::new")]
+    directories: HashSet<PathBuf>,
 }
 
 impl Config {
@@ -124,13 +129,18 @@ impl Multigit {
     fn new() -> Result<Self> {
         let config = Config::load()?;
 
-        let style_sheet =
-        StyleSheet::parse("repopath { foreground: cyan; }
+        let style_sheet = StyleSheet::parse(
+            "
+        repopath { foreground: cyan; }
         status { foreground: yellow; }
-        ").unwrap();
+        ",
+        )
+        .unwrap();
 
-
-        Ok(Self { config, style_sheet })
+        Ok(Self {
+            config,
+            style_sheet,
+        })
     }
 
     fn register(&mut self, paths: &Vec<PathBuf>) -> Result<()> {
@@ -173,7 +183,6 @@ impl Multigit {
             let repo = git2::Repository::open(&repository.path)?;
             let status = repo.statuses(Some(&mut status_options))?;
             if !status.is_empty() {
-
                 let mut index_new: bool = false;
                 let mut index_modified: bool = false;
                 let mut index_deleted: bool = false;
@@ -265,7 +274,12 @@ impl Multigit {
                     status_string.push_str(" [conflicted]");
                 }
 
-                println_markup!(&self.style_sheet, "<repopath>{}</repopath><status>{}</status>", repository.path.to_str().unwrap(), status_string);
+                println_markup!(
+                    &self.style_sheet,
+                    "<repopath>{}</repopath><status>{}</status>",
+                    repository.path.to_str().unwrap(),
+                    status_string
+                );
             }
         }
         Ok(())
