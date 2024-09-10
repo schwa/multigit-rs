@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Ok, Result};
 use clap::{Parser, Subcommand};
 use colored_markup::{println_markup, StyleSheet};
-use git2::RepositoryInitMode;
+use inquire::Confirm;
 use path_absolutize::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -20,11 +20,38 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    // Add {},
-    // Commit {},
+    Add {
+        #[arg(short, long)]
+        filter: Vec<Filter>,
+
+        passthrough: Vec<String>,
+    },
+    Commit {
+        #[arg(short, long)]
+        filter: Vec<Filter>,
+
+        passthrough: Vec<String>,
+    },
+    Push {
+        #[arg(short, long)]
+        filter: Vec<Filter>,
+
+        passthrough: Vec<String>,
+    },
+    Pull {
+        #[arg(short, long)]
+        filter: Vec<Filter>,
+
+        passthrough: Vec<String>,
+    },
     // Config {},
     // Edit {},
-    // Exec {},
+    Exec {
+        #[arg(short, long)]
+        filter: Vec<Filter>,
+
+        command: Vec<String>,
+    },
     // GC {},
     // Info {},
     /// List repositories.
@@ -34,41 +61,74 @@ enum Commands {
     },
     // Pull {},
     // Push {},
-    /// Register a git repositories or a directories of git repositories
+    /// Register a git repositories or directories of git repositories
     Register { paths: Vec<PathBuf> },
     // Reveal {},
     Status {
         #[arg(short, long)]
         filter: Vec<Filter>,
     },
+    /// Open the configured git ui program for the selected repositories.
     UI {
         #[arg(short, long)]
         filter: Vec<Filter>,
     },
-    /// Unregister a git repositories or a directories of git repositories
-    Unregister { paths: Vec<PathBuf> },
+    /// Unregister a git repositories or directories of git repositories
+    Unregister {
+        #[arg(short, long)]
+        all: bool,
+
+        paths: Vec<PathBuf>,
+    },
 }
 
-fn main() {
+fn main() -> Result<()>{
     let cli = Cli::parse();
 
     let mut multigit = Multigit::new().unwrap();
 
     match &cli.command {
         Commands::List { filter } => {
-            multigit.list(noneify(filter)).unwrap();
+            multigit.list(noneify(filter))
         }
         Commands::Register { paths } => {
-            multigit.register(paths).unwrap();
+            multigit.register(paths)
         }
         Commands::Status { filter } => {
-            multigit.status(noneify(filter)).unwrap();
+            multigit.status(noneify(filter))
         }
-        Commands::Unregister { paths } => {
-            multigit.unregister(paths).unwrap();
+        Commands::Unregister { paths, all } => {
+            multigit.unregister(paths, all)
         }
         Commands::UI { filter } => {
-            multigit.ui(noneify(filter)).unwrap();
+            multigit.ui(noneify(filter))
+        }
+        Commands::Exec { filter, command } => {
+            multigit.exec(noneify(filter), command)
+        }
+        Commands::Add {
+            filter,
+            passthrough,
+        } => {
+            multigit.add(noneify(filter), passthrough)
+        }
+        Commands::Commit {
+            filter,
+            passthrough,
+        } => {
+            multigit.commit(noneify(filter), passthrough)
+        }
+        Commands::Push {
+            filter,
+            passthrough,
+        } => {
+            multigit.commit(noneify(filter), passthrough)
+        }
+        Commands::Pull {
+            filter,
+            passthrough,
+        } => {
+            multigit.commit(noneify(filter), passthrough)
         }
     }
 }
@@ -272,12 +332,27 @@ impl Multigit {
         Ok(())
     }
 
-    fn unregister(&mut self, paths: &Vec<PathBuf>) -> Result<()> {
-        if paths.is_empty() {
-            self.config.unregister(&std::env::current_dir()?)?;
+    fn unregister(&mut self, paths: &Vec<PathBuf>, all: &bool) -> Result<()> {
+        if *all {
+            let ans = Confirm::new("Unregister all repositories and directories??")
+                .with_default(false)
+                .prompt()?;
+            match ans {
+                true => {
+                    self.config.repositories.clear();
+                    self.config.directories.clear();
+                }
+                false => {
+                    return Ok(());
+                }
+            }
         } else {
-            for path in paths {
-                self.config.unregister(path)?;
+            if paths.is_empty() {
+                self.config.unregister(&std::env::current_dir()?)?;
+            } else {
+                for path in paths {
+                    self.config.unregister(path)?;
+                }
             }
         }
         self.config.save()?;
@@ -407,11 +482,73 @@ impl Multigit {
     }
 
     fn ui(&self, filter: Option<&Vec<Filter>>) -> Result<()> {
-        for repository in self.all_repositories(filter)?.iter() {
+        let paths_to_open = self.all_repositories(filter)?;
+        if paths_to_open.len() > 1 {
+            let ans = Confirm::new(format!("Open {} repositories?", paths_to_open.len()).as_str())
+                .with_default(false)
+                .prompt()?;
+            match ans {
+                true => {}
+                false => {
+                    return Ok(());
+                }
+            }
+        }
+        for repository in paths_to_open.iter() {
             println!("Opening git ui for {}", repository.path.to_str().unwrap());
-            //open_in_git_ui(&repository.path)?;
+            open_in_git_ui(&repository.path)?;
         }
         Ok(())
+    }
+
+    fn exec(&self, filter: Option<&Vec<Filter>>, commands: &Vec<String>) -> Result<()> {
+        let repositories = self.all_repositories(filter)?;
+        for repository in repositories.iter() {
+            let mut command = std::process::Command::new(&commands[0]);
+            command.args(&commands[1..]);
+            command.current_dir(&repository.path);
+            let status = command.status()?;
+            if !status.success() {
+                return Err(anyhow!("Failed to execute command"));
+            }
+        }
+        Ok(())
+    }
+
+    fn git_command(
+        &self,
+        command: &str,
+        filter: Option<&Vec<Filter>>,
+        passthrough: &Vec<String>,
+    ) -> Result<()> {
+        let repositories = self.all_repositories(filter)?;
+        for repository in repositories.iter() {
+            let mut args = vec![command];
+            args.extend(passthrough.iter().map(|s| s.as_str()));
+            let mut command = std::process::Command::new("git");
+            command.args(&args);
+            command.current_dir(&repository.path);
+            let status = command.status()
+                .with_context(|| format!("Failed to execute git command: {:?}", command))?;
+            if !status.success() {
+                return Err(anyhow!("Failed to execute git command"));
+            }
+        }
+        Ok(())
+    }
+
+    fn commit(&self, filter: Option<&Vec<Filter>>, passthrough: &Vec<String>) -> Result<()> {
+        self.git_command("commit", filter, passthrough)
+    }
+
+    fn add(&self, filter: Option<&Vec<Filter>>, passthrough: &Vec<String>) -> Result<()> {
+        self.git_command("add", filter, passthrough)
+    }
+    fn push(&self, filter: Option<&Vec<Filter>>, passthrough: &Vec<String>) -> Result<()> {
+        self.git_command("push", filter, passthrough)
+    }
+    fn pull(&self, filter: Option<&Vec<Filter>>, passthrough: &Vec<String>) -> Result<()> {
+        self.git_command("pull", filter, passthrough)
     }
 }
 
@@ -422,7 +559,6 @@ enum Filter {
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 enum EntryState {
-    Clean,
     Dirty,
 }
 
