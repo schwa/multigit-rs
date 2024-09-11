@@ -1,14 +1,7 @@
-use anyhow::{anyhow, Context, Ok, Result};
+use anyhow::Result;
 use clap::{Parser, Subcommand};
-use colored_markup::{println_markup, StyleSheet};
-use inquire::Confirm;
-use path_absolutize::*;
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
-
 use multigit_rs::*;
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[clap(name = "My CLI Program")]
@@ -32,18 +25,21 @@ enum Commands {
         #[arg(short, long)]
         filter: Vec<Filter>,
 
+        #[clap(trailing_var_arg=true, allow_hyphen_values = true)]
         passthrough: Vec<String>,
     },
     Push {
         #[arg(short, long)]
         filter: Vec<Filter>,
 
+        #[clap(trailing_var_arg=true, allow_hyphen_values = true)]
         passthrough: Vec<String>,
     },
     Pull {
         #[arg(short, long)]
         filter: Vec<Filter>,
 
+        #[clap(trailing_var_arg=true, allow_hyphen_values = true)]
         passthrough: Vec<String>,
     },
     // Config {},
@@ -52,6 +48,7 @@ enum Commands {
         #[arg(short, long)]
         filter: Vec<Filter>,
 
+        #[clap(trailing_var_arg=true, allow_hyphen_values = true)]
         command: Vec<String>,
     },
     // GC {},

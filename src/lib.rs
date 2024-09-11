@@ -4,9 +4,10 @@ use inquire::Confirm;
 use path_absolutize::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::io::repeat;
 use std::path::{Path, PathBuf};
+use termsize;
 use walkdir::WalkDir;
-
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RepositoryEntry {
@@ -403,9 +404,14 @@ impl Multigit {
         passthrough: &Vec<String>,
     ) -> Result<()> {
         let repositories = self.all_repositories(filter)?;
+
+        let width = termsize::get().unwrap().cols as usize;
+
+        let divider = std::iter::repeat("#").take(width).collect::<String>();
+
         for (index, repository) in repositories.iter().enumerate() {
             if index != 0 {
-                println_markup!(&self.style_sheet, "\n<divider>########################################</divider>\n");
+                println_markup!(&self.style_sheet, "\n<divider>{}</divider>\n", divider);
             }
             println_markup!(
                 &self.style_sheet,
@@ -418,12 +424,7 @@ impl Multigit {
             let mut command = std::process::Command::new("git");
             command.args(&args);
             command.current_dir(&repository.path);
-            let status = command
-                .status()
-                .with_context(|| format!("Failed to execute git command: {:?}", command))?;
-            // if !status.success() {
-            //     return Err(anyhow!("Failed to execute git command"));
-            // }
+            _ = command.status()?; // TODO: Fix status checking
         }
         Ok(())
     }
