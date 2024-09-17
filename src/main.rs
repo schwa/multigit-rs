@@ -8,8 +8,6 @@ use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use multigit::*;
 use shadow_rs::shadow;
-use std::env;
-use std::fs::File;
 use std::io;
 use std::path::PathBuf;
 
