@@ -26,12 +26,43 @@ struct Cli {
 
     /// The subcommand to execute.
     #[clap(subcommand)]
-    command: Option<Commands>,
+    command: Commands,
 }
 
 /// Enum representing the possible commands.
 #[derive(Subcommand)]
 enum Commands {
+
+    /// Register git repositories or directories of git repositories.
+    ///
+    /// Adds new repositories to be managed by the tool.
+    Register {
+        /// Paths to repositories or directories containing repositories.
+        paths: Vec<PathBuf>,
+    },
+
+    /// Unregister git repositories or directories of git repositories.
+    ///
+    /// Removes repositories from being managed by the tool.
+    Unregister {
+        /// Unregister all repositories.
+        #[arg(short, long)]
+        all: bool,
+
+        /// Paths to repositories or directories to unregister.
+        paths: Vec<PathBuf>,
+    },
+
+        /// List registered repositories.
+    ///
+    /// Shows the list of repositories currently managed by the tool.
+    List {
+        /// Filters to select specific repositories.
+        #[arg(short, long)]
+        filter: Vec<Filter>,
+    },
+
+
     /// Add files to the staging area in the selected repositories.
     Add {
         /// Filters to select specific repositories.
@@ -81,21 +112,6 @@ enum Commands {
         #[clap(trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
     },
-    /// List registered repositories.
-    ///
-    /// Shows the list of repositories currently managed by the tool.
-    List {
-        /// Filters to select specific repositories.
-        #[arg(short, long)]
-        filter: Vec<Filter>,
-    },
-    /// Register git repositories or directories of git repositories.
-    ///
-    /// Adds new repositories to be managed by the tool.
-    Register {
-        /// Paths to repositories or directories containing repositories.
-        paths: Vec<PathBuf>,
-    },
     /// Show the status of repositories.
     Status {
         /// Filters to select specific repositories.
@@ -108,19 +124,15 @@ enum Commands {
         #[arg(short, long)]
         filter: Vec<Filter>,
     },
-    /// Unregister git repositories or directories of git repositories.
-    ///
-    /// Removes repositories from being managed by the tool.
-    Unregister {
-        /// Unregister all repositories.
-        #[arg(short, long)]
-        all: bool,
-
-        /// Paths to repositories or directories to unregister.
-        paths: Vec<PathBuf>,
-    },
     /// Edit the configuration file.
     Config {},
+    /// Generate shell completions.
+    Completions {
+
+        #[arg(short, long)]
+        shell: String,
+
+    }
 }
 
 /// The main entry point of the program.
@@ -128,18 +140,11 @@ fn main() -> Result<()> {
     // Parse command-line arguments into the `Cli` struct.
     let cli = Cli::parse();
 
-    if let Some(shell) = cli.completions {
-        let shell: Shell = shell.parse().unwrap_or(Shell::Bash);
-        let mut cmd = Cli::command();
-        generate(shell, &mut cmd, "myapp", &mut io::stdout());
-        return Ok(());
-    }
-
     // Create a new instance of `Multigit`.
     let mut multigit = Multigit::new().unwrap();
 
     // Match the provided command and execute the corresponding action.
-    match &cli.command.unwrap() {
+    match &cli.command {
         Commands::List { filter } => multigit.list(noneify(filter)),
         Commands::Register { paths } => multigit.register(paths),
         Commands::Status { filter } => multigit.status(noneify(filter)),
@@ -163,8 +168,19 @@ fn main() -> Result<()> {
             passthrough,
         } => multigit.pull(noneify(filter), passthrough),
         Commands::Config {} => multigit.config(),
+        Commands::Completions { shell } => {
+            let shell: Shell = shell.parse().unwrap_or(Shell::Bash);
+            let mut cmd = Cli::command();
+            generate(shell, &mut cmd, "myapp", &mut io::stdout());
+            return Ok(());
+
+        }
+
+
+
     }
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -172,7 +188,14 @@ mod tests {
     use assert_cmd::Command;
 
     #[test]
-    fn it_works() {
+    fn run_empty() {
+        // This will fail because no arguments are provided.
+        let mut cmd = Command::cargo_bin("multigit").unwrap();
+        cmd.assert().failure();
+    }
+
+    #[test]
+    fn run_help() {
         let mut cmd = Command::cargo_bin("multigit").unwrap();
         cmd.args(["--help"]);
         cmd.assert().success();
