@@ -20,9 +20,7 @@ shadow!(build);
 #[clap(version = build::PKG_VERSION)]
 #[clap(about = "A multi-command CLI example", long_about = None)]
 struct Cli {
-    /// Generate shell completions for the specified shell.
-    #[arg(long)]
-    completions: Option<String>,
+
 
     /// The subcommand to execute.
     #[clap(subcommand)]
