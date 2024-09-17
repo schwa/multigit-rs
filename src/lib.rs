@@ -221,15 +221,12 @@ impl Multigit {
         let mut errors = Vec::new();
 
         for repository in repositories {
-            match process(repository) {
-                Err(e) => {
-                    eprintln!("Error processing repository {:?}: {}", repository.path, e);
-                    errors.push(RepositoryError {
-                        path: repository.path.clone(),
-                        error: e,
-                    });
-                }
-                _ => (),
+            if let Err(e) = process(repository) {
+                eprintln!("Error processing repository {:?}: {}", repository.path, e);
+                errors.push(RepositoryError {
+                    path: repository.path.clone(),
+                    error: e,
+                });
             }
         }
 
