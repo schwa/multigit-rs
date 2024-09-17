@@ -365,7 +365,7 @@ impl Multigit {
     }
 
     /// Executes a custom command in the selected repositories.
-    pub fn exec(&self, filter: Option<&Vec<Filter>>, commands: &Vec<String>) -> Result<()> {
+    pub fn exec(&self, filter: Option<&Vec<Filter>>, commands: &[String]) -> Result<()> {
         let repositories = self.all_repositories(filter)?;
         for repository in repositories.iter() {
             let mut command = std::process::Command::new(&commands[0]);
@@ -384,7 +384,7 @@ impl Multigit {
         &self,
         command: &str,
         filter: Option<&Vec<Filter>>,
-        passthrough: &Vec<String>,
+        passthrough: &[String],
     ) -> Result<()> {
         let repositories = self.all_repositories(filter)?;
 
@@ -413,22 +413,22 @@ impl Multigit {
     }
 
     /// Commits changes in the selected repositories.
-    pub fn commit(&self, filter: Option<&Vec<Filter>>, passthrough: &Vec<String>) -> Result<()> {
+    pub fn commit(&self, filter: Option<&Vec<Filter>>, passthrough: &[String]) -> Result<()> {
         self.git_command("commit", filter, passthrough)
     }
 
     /// Adds files to the staging area in the selected repositories.
-    pub fn add(&self, filter: Option<&Vec<Filter>>, passthrough: &Vec<String>) -> Result<()> {
+    pub fn add(&self, filter: Option<&Vec<Filter>>, passthrough: &[String]) -> Result<()> {
         self.git_command("add", filter, passthrough)
     }
 
     /// Pushes changes to remote repositories.
-    pub fn push(&self, filter: Option<&Vec<Filter>>, passthrough: &Vec<String>) -> Result<()> {
+    pub fn push(&self, filter: Option<&Vec<Filter>>, passthrough: &[String]) -> Result<()> {
         self.git_command("push", filter, passthrough)
     }
 
     /// Pulls changes from remote repositories.
-    pub fn pull(&self, filter: Option<&Vec<Filter>>, passthrough: &Vec<String>) -> Result<()> {
+    pub fn pull(&self, filter: Option<&Vec<Filter>>, passthrough: &[String]) -> Result<()> {
         self.git_command("pull", filter, passthrough)
     }
 }
