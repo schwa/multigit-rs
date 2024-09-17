@@ -9,9 +9,9 @@ use inquire::Confirm;
 use path_absolutize::Absolutize;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
-use std::fs;
 
 /// Represents an entry for a single Git repository.
 #[derive(Debug, Deserialize, Serialize)]
@@ -83,16 +83,15 @@ impl Config {
         let config_path = PathBuf::from(config_path.to_string());
 
         match fs::read_to_string(&config_path) {
-            Ok(config_content) => {
-                toml::from_str(&config_content).map_err(|e| anyhow!("Failed to parse config: {}", e))
-            }
+            Ok(config_content) => toml::from_str(&config_content)
+                .map_err(|e| anyhow!("Failed to parse config: {}", e)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 println!("Config file not found. Using default configuration.");
                 anyhow::Ok(Config::default())
             }
             Err(e) => Err(anyhow!("Failed to read config file: {}", e)),
         }
-        }
+    }
 
     /// Saves the current configuration to the default config file.
     pub fn save(&self) -> Result<()> {
@@ -173,7 +172,7 @@ impl Multigit {
     }
 
     /// Retrieves all repositories, optionally filtering them.
-    pub fn all_repositories(&self, filter: Option<&Vec<Filter>>) -> Result<Vec<RepositoryEntry>> {
+    fn all_repositories(&self, filter: Option<&Vec<Filter>>) -> Result<Vec<RepositoryEntry>> {
         let mut repositories: Vec<RepositoryEntry> = Vec::new();
         for (_, repository) in self.config.repositories.iter() {
             repositories.push(RepositoryEntry {
@@ -423,7 +422,7 @@ impl Multigit {
     /// Executes a Git command with optional arguments in the selected repositories.
     pub fn git_command(
         &self,
-        command: &str,
+        git_command: &str,
         filter: Option<&Vec<Filter>>,
         passthrough: &[String],
     ) -> Result<()> {
@@ -443,15 +442,27 @@ impl Multigit {
             println_markup!(
                 &self.style_sheet,
                 "Running `<command>{}</command>` in <repository>{}</repository>\n",
-                command,
+                git_command,
                 repository.path.to_str().unwrap()
             );
-            let mut args = vec![command];
+            let mut args = vec![git_command];
             args.extend(passthrough.iter().map(|s| s.as_str()));
             let mut command = std::process::Command::new("git");
             command.args(&args);
             command.current_dir(&repository.path);
-            _ = command.status()?; // TODO: Fix status checking
+
+            // Execute the command and capture the status
+            let status = command.status()?;
+
+            // Check if the command was successful
+            if !status.success() {
+                return Err(anyhow!(
+                    "Git command {} failed in repository `{}` with exit code {:?}",
+                    git_command,
+                    repository.path.display(),
+                    status.code()
+                ));
+            }
             Ok(())
         })
     }
