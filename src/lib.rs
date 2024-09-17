@@ -8,9 +8,12 @@ use colored_markup::{println_markup, StyleSheet};
 use inquire::Confirm;
 use path_absolutize::Absolutize;
 use serde::{Deserialize, Serialize};
+use shell_words;
 use std::collections::{HashMap, HashSet};
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use walkdir::WalkDir;
 
 /// Represents an entry for a single Git repository.
@@ -485,6 +488,20 @@ impl Multigit {
     /// Pulls changes from remote repositories.
     pub fn pull(&self, filter: Option<&Vec<Filter>>, passthrough: &[String]) -> Result<()> {
         self.git_command("pull", filter, passthrough)
+    }
+
+    pub fn config(&self) -> Result<()> {
+        let editor = env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
+        let config_path = "~/.config/multigit/config.toml";
+        let config_path = shellexpand::tilde(config_path);
+        let full_command = format!("{} {}", editor, config_path);
+        let args = shell_words::split(&full_command)?;
+        let (cmd, args) = args.split_first().ok_or("Empty command").unwrap();
+        let status = Command::new(cmd).args(args).status()?;
+        if !status.success() {
+            return Err(anyhow!("Failed to execute command"));
+        }
+        Ok(())
     }
 }
 

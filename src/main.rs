@@ -22,6 +22,7 @@ shadow!(build);
 #[clap(version = build::PKG_VERSION)]
 #[clap(about = "A multi-command CLI example", long_about = None)]
 struct Cli {
+    /// Generate shell completions for the specified shell.
     #[arg(long)]
     completions: Option<String>,
 
@@ -120,6 +121,8 @@ enum Commands {
         /// Paths to repositories or directories to unregister.
         paths: Vec<PathBuf>,
     },
+    /// Edit the configuration file.
+    Config {},
 }
 
 /// The main entry point of the program.
@@ -161,6 +164,7 @@ fn main() -> Result<()> {
             filter,
             passthrough,
         } => multigit.pull(noneify(filter), passthrough),
+        Commands::Config {} => multigit.config(),
     }
 }
 

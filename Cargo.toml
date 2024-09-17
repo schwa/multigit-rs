@@ -23,6 +23,7 @@ inquire = "0.7.5"
 path-absolutize = "3.1.1"
 serde = { version = "1.0.210", features = ["derive"] }
 shadow-rs = "0.35.0"
+shell-words = "1.1.0"
 shellexpand = "3.1.0"
 termsize = "0.1.9"
 toml = "0.8.19"
