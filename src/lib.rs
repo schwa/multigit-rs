@@ -3,7 +3,7 @@
 //! This library provides functionalities to register, unregister, list, and perform Git operations on multiple repositories.
 //! It supports filtering repositories based on their state and provides utilities to execute commands across repositories.
 
-use anyhow::{anyhow, Context, Ok, Result};
+use anyhow::{anyhow, Context, Result};
 use colored_markup::{println_markup, StyleSheet};
 use inquire::Confirm;
 use path_absolutize::*;
@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
+use std::fs;
 
 /// Represents an entry for a single Git repository.
 #[derive(Debug, Deserialize, Serialize)]
@@ -58,7 +59,7 @@ impl RepositoryEntry {
                 _ => {}
             }
         }
-        Ok(state)
+        anyhow::Ok(state)
     }
 }
 
@@ -79,10 +80,19 @@ impl Config {
     pub fn load() -> Result<Self> {
         let config_path = "~/.config/multigit/config.toml";
         let config_path = shellexpand::tilde(config_path);
-        let config_path = config_path.to_string();
-        let config_content = std::fs::read_to_string(config_path)?;
-        toml::from_str(&config_content).map_err(|e| anyhow!(e))
-    }
+        let config_path = PathBuf::from(config_path.to_string());
+
+        match fs::read_to_string(&config_path) {
+            Ok(config_content) => {
+                toml::from_str(&config_content).map_err(|e| anyhow!("Failed to parse config: {}", e))
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                println!("Config file not found. Using default configuration.");
+                anyhow::Ok(Config::default())
+            }
+            Err(e) => Err(anyhow!("Failed to read config file: {}", e)),
+        }
+        }
 
     /// Saves the current configuration to the default config file.
     pub fn save(&self) -> Result<()> {
@@ -91,7 +101,7 @@ impl Config {
         let config_path = config_path.to_string();
         let config_content = toml::to_string(&self)?;
         std::fs::write(config_path, config_content)?;
-        Ok(())
+        anyhow::Ok(())
     }
 
     /// Registers a path as a repository or directory.
@@ -116,7 +126,7 @@ impl Config {
             self.repositories.insert(name.to_string(), entry);
         }
         self.save()?;
-        Ok(())
+        anyhow::Ok(())
     }
 
     /// Unregisters a repository or directory.
@@ -128,7 +138,7 @@ impl Config {
         self.directories.remove(name);
         self.repositories.remove(name);
         self.save()?;
-        Ok(())
+        anyhow::Ok(())
     }
 }
 
@@ -156,7 +166,7 @@ impl Multigit {
         )
         .unwrap();
 
-        Ok(Self {
+        anyhow::Ok(Self {
             config,
             style_sheet,
         })
@@ -197,7 +207,7 @@ impl Multigit {
         }
 
         repositories.sort_by(|a, b| a.path.cmp(&b.path));
-        Ok(repositories)
+        anyhow::Ok(repositories)
     }
 
     fn process_repositories<F>(
@@ -224,7 +234,7 @@ impl Multigit {
         }
 
         if errors.is_empty() {
-            Ok(())
+            anyhow::Ok(())
         } else {
             Err(anyhow!("Errors occurred in {} repositories", errors.len()))
         }
@@ -240,7 +250,7 @@ impl Multigit {
             }
         }
         self.config.save()?;
-        Ok(())
+        anyhow::Ok(())
     }
 
     /// Unregisters repositories or directories.
@@ -255,7 +265,7 @@ impl Multigit {
                     self.config.directories.clear();
                 }
                 false => {
-                    return Ok(());
+                    return anyhow::Ok(());
                 }
             }
         } else if paths.is_empty() {
@@ -266,7 +276,7 @@ impl Multigit {
             }
         }
         self.config.save()?;
-        Ok(())
+        anyhow::Ok(())
     }
 
     /// Lists all registered repositories.
@@ -281,7 +291,7 @@ impl Multigit {
                     .to_str()
                     .ok_or_else(|| anyhow!("Invalid path"))?
             );
-            Ok(())
+            anyhow::Ok(())
         })
     }
 
@@ -372,7 +382,7 @@ impl Multigit {
                     status_string
                 );
             }
-            Ok(())
+            anyhow::Ok(())
         })
     }
 
@@ -384,7 +394,7 @@ impl Multigit {
                 .with_default(false)
                 .prompt()?;
             if !ans {
-                return Ok(());
+                return anyhow::Ok(());
             }
         }
         for repository in paths_to_open.iter() {
@@ -395,7 +405,7 @@ impl Multigit {
             );
             open_in_git_ui(&repository.path)?;
         }
-        Ok(())
+        anyhow::Ok(())
     }
 
     /// Executes a custom command in the selected repositories.
