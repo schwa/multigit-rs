@@ -544,6 +544,7 @@ pub fn noneify<T>(v: &Vec<T>) -> Option<&Vec<T>> {
     }
 }
 
+#[allow(dead_code)]
 struct RepositoryError {
     path: PathBuf,
     error: anyhow::Error,
