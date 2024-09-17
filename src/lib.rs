@@ -10,7 +10,6 @@ use path_absolutize::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use termsize;
 use walkdir::WalkDir;
 
 /// Represents an entry for a single Git repository.
@@ -181,9 +180,7 @@ impl Multigit {
 
         if let Some(filter) = filter {
             if !filter.is_empty() {
-                repositories = repositories
-                    .into_iter()
-                    .filter(|repository| {
+                repositories.retain(|repository| {
                         let state = repository.state().unwrap();
                         for f in filter {
                             match f {
@@ -195,8 +192,7 @@ impl Multigit {
                             }
                         }
                         false
-                    })
-                    .collect();
+                    });
             }
         }
 
@@ -232,13 +228,11 @@ impl Multigit {
                     return Ok(());
                 }
             }
+        } else if paths.is_empty() {
+            self.config.unregister(&std::env::current_dir()?)?;
         } else {
-            if paths.is_empty() {
-                self.config.unregister(&std::env::current_dir()?)?;
-            } else {
-                for path in paths {
-                    self.config.unregister(path)?;
-                }
+            for path in paths {
+                self.config.unregister(path)?;
             }
         }
         self.config.save()?;
@@ -396,7 +390,7 @@ impl Multigit {
 
         let width = termsize::get().unwrap().cols as usize;
 
-        let divider = std::iter::repeat("#").take(width).collect::<String>();
+        let divider = "#".repeat(width);
 
         for (index, repository) in repositories.iter().enumerate() {
             if index != 0 {
@@ -494,7 +488,7 @@ pub fn is_git_repository(path: &Path) -> bool {
 
 /// Checks if a path is hidden (starts with a dot).
 pub fn is_hidden(path: &Path) -> bool {
-    path.file_name().unwrap().to_str().unwrap().starts_with(".")
+    path.file_name().unwrap().to_str().unwrap().starts_with('.')
 }
 
 /// Returns `None` if the vector is empty, otherwise returns `Some(&Vec<T>)`.
