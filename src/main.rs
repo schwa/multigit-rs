@@ -6,8 +6,8 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use multigit::*;
-use std::path::PathBuf;
 use shadow_rs::shadow;
+use std::path::PathBuf;
 
 shadow!(build);
 
@@ -147,5 +147,18 @@ fn main() -> Result<()> {
             filter,
             passthrough,
         } => multigit.pull(noneify(filter), passthrough),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert_cmd::Command;
+
+    #[test]
+    fn it_works() {
+        let mut cmd = Command::cargo_bin("multigit").unwrap();
+        cmd.args(&["--help"]);
+        cmd.assert().success();
     }
 }
