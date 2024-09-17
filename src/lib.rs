@@ -7,17 +7,16 @@ use anyhow::{anyhow, Context, Result};
 use colored_markup::{println_markup, StyleSheet};
 use inquire::Confirm;
 use path_absolutize::Absolutize;
+use patharg::InputArg;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use walkdir::WalkDir;
-use patharg::InputArg;
-use std::io::{Read};
-
 
 /// Represents an entry for a single Git repository.
 #[derive(Debug, Deserialize, Serialize)]
@@ -82,13 +81,8 @@ pub struct Config {
 }
 
 impl Config {
-
-
-
-
     /// Loads the configuration from the default config file.
     pub fn load(path: InputArg) -> Result<Self> {
-
         let content = match path {
             InputArg::Stdin => {
                 let mut buffer = String::new();
@@ -98,7 +92,8 @@ impl Config {
             InputArg::Path(path) => {
                 let expanded_path = shellexpand::tilde(path.to_str().unwrap());
                 let config_path = PathBuf::from(expanded_path.to_string());
-                fs::read_to_string(config_path).map_err(|e| anyhow!("Failed to read config file: {}", e))?
+                fs::read_to_string(config_path)
+                    .map_err(|e| anyhow!("Failed to read config file: {}", e))?
             }
         };
 
@@ -170,7 +165,6 @@ pub struct Multigit {
 impl Multigit {
     /// Creates a new instance of `Multigit`.
     pub fn new(config: Config) -> Result<Self> {
-
         let style_sheet = StyleSheet::parse(
             "
             repository { foreground: cyan; }

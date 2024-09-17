@@ -7,10 +7,10 @@ use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use multigit::*;
+use patharg::InputArg;
 use shadow_rs::shadow;
 use std::io;
 use std::path::PathBuf;
-use patharg::InputArg;
 
 shadow!(build);
 
@@ -21,7 +21,6 @@ shadow!(build);
 #[clap(version = build::PKG_VERSION)]
 #[clap(about = "A multi-command CLI example", long_about = None)]
 struct Cli {
-
     #[arg(short, long)]
     #[clap(default_value = "~/.config/multigit/config.toml")]
     config: InputArg,
@@ -34,7 +33,6 @@ struct Cli {
 /// Enum representing the possible commands.
 #[derive(Subcommand)]
 enum Commands {
-
     /// Register git repositories or directories of git repositories.
     ///
     /// Adds new repositories to be managed by the tool.
@@ -55,7 +53,7 @@ enum Commands {
         paths: Vec<PathBuf>,
     },
 
-        /// List registered repositories.
+    /// List registered repositories.
     ///
     /// Shows the list of repositories currently managed by the tool.
     List {
@@ -63,7 +61,6 @@ enum Commands {
         #[arg(short, long)]
         filter: Vec<Filter>,
     },
-
 
     /// Add files to the staging area in the selected repositories.
     Add {
@@ -130,11 +127,9 @@ enum Commands {
     Config {},
     /// Generate shell completions.
     Completions {
-
         #[arg(short, long)]
         shell: String,
-
-    }
+    },
 }
 
 /// The main entry point of the program.
@@ -176,15 +171,10 @@ fn main() -> Result<()> {
             let shell: Shell = shell.parse().unwrap_or(Shell::Bash);
             let mut cmd = Cli::command();
             generate(shell, &mut cmd, "myapp", &mut io::stdout());
-            return Ok(());
-
+            Ok(())
         }
-
-
-
     }
 }
-
 
 #[cfg(test)]
 mod tests {
