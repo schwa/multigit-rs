@@ -462,7 +462,9 @@ pub struct RepositoryState {
 /// Opens the configured Git UI for a given repository path.
 pub fn open_in_git_ui(path: &Path) -> Result<()> {
     let editor = "gitup";
-    let status = std::process::Command::new(editor).current_dir(path).status()?;
+    let status = std::process::Command::new(editor)
+        .current_dir(path)
+        .status()?;
     if !status.success() {
         return Err(anyhow!("Failed to open git ui"));
     }
