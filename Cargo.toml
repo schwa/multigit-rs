@@ -1,7 +1,15 @@
 [package]
 name = "multigit"
 version = "0.1.0"
+authors = ["Jonathan Wight <schwa@schwa.io>"]
 edition = "2021"
+description = "A CLI tool to manage multiple Git repositories simultaneously"
+readme = "README.md"
+homepage = "https://github.com/schwa/multigit-rs"
+repository = "https://github.com/schwa/multigit-rs"
+license = "MIT"
+keywords = ["git", "cli", "multiple", "repositories", "management"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 anyhow = "1.0.87"
