@@ -1,3 +1,8 @@
+//! A library for managing multiple Git repositories.
+//!
+//! This library provides functionalities to register, unregister, list, and perform Git operations on multiple repositories.
+//! It supports filtering repositories based on their state and provides utilities to execute commands across repositories.
+
 use anyhow::{anyhow, Context, Ok, Result};
 use colored_markup::{println_markup, StyleSheet};
 use inquire::Confirm;
@@ -8,17 +13,24 @@ use std::path::{Path, PathBuf};
 use termsize;
 use walkdir::WalkDir;
 
+/// Represents an entry for a single Git repository.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RepositoryEntry {
+    /// The path to the repository.
     pub path: PathBuf,
 }
 
+/// Represents an entry for a directory containing Git repositories.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct DirectoryEntry {
+    /// The path to the directory.
     pub path: PathBuf,
 }
 
 impl RepositoryEntry {
+    /// Retrieves the state of the repository.
+    ///
+    /// Returns a `RepositoryState` containing information about the repository's status.
     pub fn state(&self) -> Result<RepositoryState> {
         let mut state = RepositoryState {
             entries: HashSet::new(),
@@ -31,37 +43,17 @@ impl RepositoryEntry {
         let statuses = git_repo.statuses(Some(&mut status_options))?;
         for status in statuses.into_iter() {
             match status.status() {
-                git2::Status::INDEX_NEW => {
-                    state.entries.insert(EntryState::Dirty);
-                }
-                git2::Status::INDEX_MODIFIED => {
-                    state.entries.insert(EntryState::Dirty);
-                }
-                git2::Status::INDEX_DELETED => {
-                    state.entries.insert(EntryState::Dirty);
-                }
-                git2::Status::INDEX_RENAMED => {
-                    state.entries.insert(EntryState::Dirty);
-                }
-                git2::Status::INDEX_TYPECHANGE => {
-                    state.entries.insert(EntryState::Dirty);
-                }
-                git2::Status::WT_NEW => {
-                    state.entries.insert(EntryState::Dirty);
-                }
-                git2::Status::WT_MODIFIED => {
-                    state.entries.insert(EntryState::Dirty);
-                }
-                git2::Status::WT_DELETED => {
-                    state.entries.insert(EntryState::Dirty);
-                }
-                git2::Status::WT_TYPECHANGE => {
-                    state.entries.insert(EntryState::Dirty);
-                }
-                git2::Status::WT_RENAMED => {
-                    state.entries.insert(EntryState::Dirty);
-                }
-                git2::Status::CONFLICTED => {
+                git2::Status::INDEX_NEW
+                | git2::Status::INDEX_MODIFIED
+                | git2::Status::INDEX_DELETED
+                | git2::Status::INDEX_RENAMED
+                | git2::Status::INDEX_TYPECHANGE
+                | git2::Status::WT_NEW
+                | git2::Status::WT_MODIFIED
+                | git2::Status::WT_DELETED
+                | git2::Status::WT_TYPECHANGE
+                | git2::Status::WT_RENAMED
+                | git2::Status::CONFLICTED => {
                     state.entries.insert(EntryState::Dirty);
                 }
                 _ => {}
@@ -71,16 +63,20 @@ impl RepositoryEntry {
     }
 }
 
+/// Configuration data for the application, including registered repositories and directories.
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct Config {
+    /// A map of repository names to their entries.
     #[serde(default = "HashMap::new")]
     pub repositories: HashMap<String, RepositoryEntry>,
 
+    /// A map of directory names to their entries.
     #[serde(default = "HashMap::new")]
     pub directories: HashMap<String, DirectoryEntry>,
 }
 
 impl Config {
+    /// Loads the configuration from the default config file.
     pub fn load() -> Result<Self> {
         let config_path = "~/.config/multigit/config.toml";
         let config_path = shellexpand::tilde(config_path);
@@ -89,6 +85,7 @@ impl Config {
         toml::from_str(&config_content).map_err(|e| anyhow!(e))
     }
 
+    /// Saves the current configuration to the default config file.
     pub fn save(&self) -> Result<()> {
         let config_path = "~/.config/multigit/config.toml";
         let config_path = shellexpand::tilde(config_path);
@@ -98,6 +95,10 @@ impl Config {
         Ok(())
     }
 
+    /// Registers a path as a repository or directory.
+    ///
+    /// If the path is a Git repository, it is added to the repositories map.
+    /// If the path is a directory containing repositories, it is added to the directories map.
     pub fn register(&mut self, path: &Path) -> Result<()> {
         let absolute_path = path.absolutize().context("Failed to get absolute path")?;
         let name = absolute_path
@@ -119,6 +120,7 @@ impl Config {
         Ok(())
     }
 
+    /// Unregisters a repository or directory.
     pub fn unregister(&mut self, path: &PathBuf) -> Result<()> {
         let absolute_path = path.absolutize().context("Failed to get absolute path")?;
         let name = absolute_path
@@ -131,23 +133,27 @@ impl Config {
     }
 }
 
+/// Represents the main application handling multiple repositories.
 #[derive(Debug)]
 pub struct Multigit {
+    /// The configuration containing repositories and directories.
     pub config: Config,
+    /// The stylesheet used for colored output.
     pub style_sheet: StyleSheet<'static>,
 }
 
 impl Multigit {
+    /// Creates a new instance of `Multigit`.
     pub fn new() -> Result<Self> {
         let config = Config::load()?;
 
         let style_sheet = StyleSheet::parse(
             "
-        repository { foreground: cyan; }
-        status { foreground: yellow; }
-        command { foreground: green; }
-        divider { foreground: red; }
-        ",
+            repository { foreground: cyan; }
+            status { foreground: yellow; }
+            command { foreground: green; }
+            divider { foreground: red; }
+            ",
         )
         .unwrap();
 
@@ -157,6 +163,7 @@ impl Multigit {
         })
     }
 
+    /// Retrieves all repositories, optionally filtering them.
     pub fn all_repositories(&self, filter: Option<&Vec<Filter>>) -> Result<Vec<RepositoryEntry>> {
         let mut repositories: Vec<RepositoryEntry> = Vec::new();
         for (_, repository) in self.config.repositories.iter() {
@@ -187,7 +194,7 @@ impl Multigit {
                                 }
                             }
                         }
-                        return false;
+                        false
                     })
                     .collect();
             }
@@ -197,6 +204,7 @@ impl Multigit {
         Ok(repositories)
     }
 
+    /// Registers paths as repositories or directories.
     pub fn register(&mut self, paths: &Vec<PathBuf>) -> Result<()> {
         if paths.is_empty() {
             self.config.register(&std::env::current_dir()?)?;
@@ -209,6 +217,7 @@ impl Multigit {
         Ok(())
     }
 
+    /// Unregisters repositories or directories.
     pub fn unregister(&mut self, paths: &Vec<PathBuf>, all: &bool) -> Result<()> {
         if *all {
             let ans = Confirm::new("Unregister all repositories and directories??")
@@ -236,6 +245,7 @@ impl Multigit {
         Ok(())
     }
 
+    /// Lists all registered repositories.
     pub fn list(&self, filter: Option<&Vec<Filter>>) -> Result<()> {
         for repository in self.all_repositories(filter)?.iter() {
             println_markup!(
@@ -247,6 +257,7 @@ impl Multigit {
         Ok(())
     }
 
+    /// Shows the status of all repositories.
     pub fn status(&self, filter: Option<&Vec<Filter>>) -> Result<()> {
         let mut status_options = git2::StatusOptions::new();
         status_options.include_untracked(true);
@@ -270,45 +281,24 @@ impl Multigit {
                 let mut conflicted: bool = false;
 
                 for entry in status.iter() {
-                    if entry.status() == git2::Status::INDEX_NEW {
-                        index_new = true;
-                    }
-                    if entry.status() == git2::Status::INDEX_MODIFIED {
-                        index_modified = true;
-                    }
-                    if entry.status() == git2::Status::INDEX_DELETED {
-                        index_deleted = true;
-                    }
-                    if entry.status() == git2::Status::INDEX_RENAMED {
-                        index_renamed = true;
-                    }
-                    if entry.status() == git2::Status::INDEX_TYPECHANGE {
-                        index_typechange = true;
-                    }
-                    if entry.status() == git2::Status::WT_NEW {
-                        wt_new = true;
-                    }
-                    if entry.status() == git2::Status::WT_MODIFIED {
-                        wt_modified = true;
-                    }
-                    if entry.status() == git2::Status::WT_DELETED {
-                        wt_deleted = true;
-                    }
-                    if entry.status() == git2::Status::WT_TYPECHANGE {
-                        wt_typechange = true;
-                    }
-                    if entry.status() == git2::Status::WT_RENAMED {
-                        wt_renamed = true;
-                    }
-                    if entry.status() == git2::Status::IGNORED {
-                        ignored = true;
-                    }
-                    if entry.status() == git2::Status::CONFLICTED {
-                        conflicted = true;
+                    match entry.status() {
+                        git2::Status::INDEX_NEW => index_new = true,
+                        git2::Status::INDEX_MODIFIED => index_modified = true,
+                        git2::Status::INDEX_DELETED => index_deleted = true,
+                        git2::Status::INDEX_RENAMED => index_renamed = true,
+                        git2::Status::INDEX_TYPECHANGE => index_typechange = true,
+                        git2::Status::WT_NEW => wt_new = true,
+                        git2::Status::WT_MODIFIED => wt_modified = true,
+                        git2::Status::WT_DELETED => wt_deleted = true,
+                        git2::Status::WT_TYPECHANGE => wt_typechange = true,
+                        git2::Status::WT_RENAMED => wt_renamed = true,
+                        git2::Status::IGNORED => ignored = true,
+                        git2::Status::CONFLICTED => conflicted = true,
+                        _ => {}
                     }
                 }
 
-                let mut status_string = "".to_string();
+                let mut status_string = String::new();
 
                 if index_new {
                     status_string.push_str(" [new]");
@@ -358,17 +348,15 @@ impl Multigit {
         Ok(())
     }
 
+    /// Opens the configured Git UI for the selected repositories.
     pub fn ui(&self, filter: Option<&Vec<Filter>>) -> Result<()> {
         let paths_to_open = self.all_repositories(filter)?;
         if paths_to_open.len() > 1 {
             let ans = Confirm::new(format!("Open {} repositories?", paths_to_open.len()).as_str())
                 .with_default(false)
                 .prompt()?;
-            match ans {
-                true => {}
-                false => {
-                    return Ok(());
-                }
+            if !ans {
+                return Ok(());
             }
         }
         for repository in paths_to_open.iter() {
@@ -382,6 +370,7 @@ impl Multigit {
         Ok(())
     }
 
+    /// Executes a custom command in the selected repositories.
     pub fn exec(&self, filter: Option<&Vec<Filter>>, commands: &Vec<String>) -> Result<()> {
         let repositories = self.all_repositories(filter)?;
         for repository in repositories.iter() {
@@ -396,6 +385,7 @@ impl Multigit {
         Ok(())
     }
 
+    /// Executes a Git command with optional arguments in the selected repositories.
     pub fn git_command(
         &self,
         command: &str,
@@ -428,37 +418,48 @@ impl Multigit {
         Ok(())
     }
 
+    /// Commits changes in the selected repositories.
     pub fn commit(&self, filter: Option<&Vec<Filter>>, passthrough: &Vec<String>) -> Result<()> {
         self.git_command("commit", filter, passthrough)
     }
 
+    /// Adds files to the staging area in the selected repositories.
     pub fn add(&self, filter: Option<&Vec<Filter>>, passthrough: &Vec<String>) -> Result<()> {
         self.git_command("add", filter, passthrough)
     }
 
+    /// Pushes changes to remote repositories.
     pub fn push(&self, filter: Option<&Vec<Filter>>, passthrough: &Vec<String>) -> Result<()> {
         self.git_command("push", filter, passthrough)
     }
 
+    /// Pulls changes from remote repositories.
     pub fn pull(&self, filter: Option<&Vec<Filter>>, passthrough: &Vec<String>) -> Result<()> {
         self.git_command("pull", filter, passthrough)
     }
 }
 
+/// Enum representing possible filters for repositories.
 #[derive(clap::ValueEnum, Clone, Debug, Serialize)]
 pub enum Filter {
+    /// Filter repositories that have uncommitted changes.
     Dirty,
 }
 
+/// Enum representing the state of repository entries.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum EntryState {
+    /// Indicates that the repository has uncommitted changes.
     Dirty,
 }
 
+/// Represents the state of a repository.
 pub struct RepositoryState {
+    /// A set of entry states.
     pub entries: HashSet<EntryState>,
 }
 
+/// Opens the configured Git UI for a given repository path.
 pub fn open_in_git_ui(path: &Path) -> Result<()> {
     let editor = "gitup";
     let status = std::process::Command::new(editor).current_dir(path).status()?;
@@ -468,6 +469,7 @@ pub fn open_in_git_ui(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Finds all Git repositories within a given path.
 pub fn find_repositories(path: &Path) -> Result<Vec<PathBuf>> {
     let mut repositories = Vec::new();
     let walker = WalkDir::new(path).into_iter().filter_entry(|e| {
@@ -478,20 +480,22 @@ pub fn find_repositories(path: &Path) -> Result<Vec<PathBuf>> {
         if is_git_repository(entry.path()) {
             let path = entry.path();
             repositories.push(path.to_path_buf());
-            // walker.skip_current_dir();
         }
     }
     Ok(repositories)
 }
 
+/// Checks if a path is a Git repository.
 pub fn is_git_repository(path: &Path) -> bool {
     path.join(".git").exists()
 }
 
+/// Checks if a path is hidden (starts with a dot).
 pub fn is_hidden(path: &Path) -> bool {
     path.file_name().unwrap().to_str().unwrap().starts_with(".")
 }
 
+/// Returns `None` if the vector is empty, otherwise returns `Some(&Vec<T>)`.
 pub fn noneify<T>(v: &Vec<T>) -> Option<&Vec<T>> {
     if v.is_empty() {
         None
