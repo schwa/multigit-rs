@@ -4,7 +4,6 @@ use inquire::Confirm;
 use path_absolutize::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::io::repeat;
 use std::path::{Path, PathBuf};
 use termsize;
 use walkdir::WalkDir;
