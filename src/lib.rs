@@ -8,7 +8,6 @@ use colored_markup::{println_markup, StyleSheet};
 use inquire::Confirm;
 use path_absolutize::Absolutize;
 use serde::{Deserialize, Serialize};
-use shell_words;
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
@@ -85,7 +84,7 @@ impl Config {
         let config_path = shellexpand::tilde(config_path);
         let config_path = PathBuf::from(config_path.to_string());
 
-        match fs::read_to_string(&config_path) {
+        match fs::read_to_string(config_path) {
             Ok(config_content) => toml::from_str(&config_content)
                 .map_err(|e| anyhow!("Failed to parse config: {}", e)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {

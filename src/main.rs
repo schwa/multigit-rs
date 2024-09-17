@@ -174,7 +174,7 @@ mod tests {
     #[test]
     fn it_works() {
         let mut cmd = Command::cargo_bin("multigit").unwrap();
-        cmd.args(&["--help"]);
+        cmd.args(["--help"]);
         cmd.assert().success();
     }
 }
