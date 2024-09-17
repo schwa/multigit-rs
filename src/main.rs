@@ -4,9 +4,13 @@
 //! It supports commands like `add`, `commit`, `push`, `pull`, `exec`, `list`, `register`, `status`, `ui`, and `unregister`.
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{generate, Shell};
 use multigit::*;
 use shadow_rs::shadow;
+use std::env;
+use std::fs::File;
+use std::io;
 use std::path::PathBuf;
 
 shadow!(build);
@@ -18,9 +22,12 @@ shadow!(build);
 #[clap(version = build::PKG_VERSION)]
 #[clap(about = "A multi-command CLI example", long_about = None)]
 struct Cli {
+    #[arg(long)]
+    completions: Option<String>,
+
     /// The subcommand to execute.
     #[clap(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 /// Enum representing the possible commands.
@@ -120,11 +127,18 @@ fn main() -> Result<()> {
     // Parse command-line arguments into the `Cli` struct.
     let cli = Cli::parse();
 
+    if let Some(shell) = cli.completions {
+        let shell: Shell = shell.parse().unwrap_or(Shell::Bash);
+        let mut cmd = Cli::command();
+        generate(shell, &mut cmd, "myapp", &mut io::stdout());
+        return Ok(());
+    }
+
     // Create a new instance of `Multigit`.
     let mut multigit = Multigit::new().unwrap();
 
     // Match the provided command and execute the corresponding action.
-    match &cli.command {
+    match &cli.command.unwrap() {
         Commands::List { filter } => multigit.list(noneify(filter)),
         Commands::Register { paths } => multigit.register(paths),
         Commands::Status { filter } => multigit.status(noneify(filter)),
@@ -152,7 +166,7 @@ fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    //use super::*;
     use assert_cmd::Command;
 
     #[test]
