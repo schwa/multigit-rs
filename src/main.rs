@@ -7,12 +7,15 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use multigit::*;
 use std::path::PathBuf;
+use shadow_rs::shadow;
+
+shadow!(build);
 
 /// The main CLI struct that defines the command-line interface.
 #[derive(Parser)]
-#[clap(name = "multigit")]
+#[clap(name = build::PROJECT_NAME)]
 #[clap(author = "Jonathan Wight")]
-#[clap(version = "0.1")]
+#[clap(version = build::PKG_VERSION)]
 #[clap(about = "A multi-command CLI example", long_about = None)]
 struct Cli {
     /// The subcommand to execute.
