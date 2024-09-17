@@ -181,23 +181,53 @@ impl Multigit {
         if let Some(filter) = filter {
             if !filter.is_empty() {
                 repositories.retain(|repository| {
-                        let state = repository.state().unwrap();
-                        for f in filter {
-                            match f {
-                                Filter::Dirty => {
-                                    if state.entries.contains(&EntryState::Dirty) {
-                                        return true;
-                                    }
+                    let state = repository.state().unwrap();
+                    for f in filter {
+                        match f {
+                            Filter::Dirty => {
+                                if state.entries.contains(&EntryState::Dirty) {
+                                    return true;
                                 }
                             }
                         }
-                        false
-                    });
+                    }
+                    false
+                });
             }
         }
 
         repositories.sort_by(|a, b| a.path.cmp(&b.path));
         Ok(repositories)
+    }
+
+    fn process_repositories<F>(
+        &self,
+        repositories: &[RepositoryEntry],
+        mut process: F,
+    ) -> Result<()>
+    where
+        F: FnMut(&RepositoryEntry) -> Result<()>,
+    {
+        let mut errors = Vec::new();
+
+        for repository in repositories {
+            match process(repository) {
+                Err(e) => {
+                    eprintln!("Error processing repository {:?}: {}", repository.path, e);
+                    errors.push(RepositoryError {
+                        path: repository.path.clone(),
+                        error: e,
+                    });
+                }
+                _ => (),
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(anyhow!("Errors occurred in {} repositories", errors.len()))
+        }
     }
 
     /// Registers paths as repositories or directories.
@@ -241,23 +271,27 @@ impl Multigit {
 
     /// Lists all registered repositories.
     pub fn list(&self, filter: Option<&Vec<Filter>>) -> Result<()> {
-        for repository in self.all_repositories(filter)?.iter() {
+        let repositories = self.all_repositories(filter)?;
+        self.process_repositories(&repositories, |repository| {
             println_markup!(
                 &self.style_sheet,
                 "<repository>{}</repository>",
-                repository.path.to_str().unwrap(),
+                repository
+                    .path
+                    .to_str()
+                    .ok_or_else(|| anyhow!("Invalid path"))?
             );
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Shows the status of all repositories.
     pub fn status(&self, filter: Option<&Vec<Filter>>) -> Result<()> {
-        let mut status_options = git2::StatusOptions::new();
-        status_options.include_untracked(true);
-        status_options.include_ignored(false);
-
-        for repository in self.all_repositories(filter)?.iter() {
+        let repositories = self.all_repositories(filter)?;
+        self.process_repositories(&repositories, |repository| {
+            let mut status_options = git2::StatusOptions::new();
+            status_options.include_untracked(true);
+            status_options.include_ignored(false);
             let repo = git2::Repository::open(&repository.path)?;
             let status = repo.statuses(Some(&mut status_options))?;
             if !status.is_empty() {
@@ -338,8 +372,8 @@ impl Multigit {
                     status_string
                 );
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Opens the configured Git UI for the selected repositories.
@@ -367,7 +401,7 @@ impl Multigit {
     /// Executes a custom command in the selected repositories.
     pub fn exec(&self, filter: Option<&Vec<Filter>>, commands: &[String]) -> Result<()> {
         let repositories = self.all_repositories(filter)?;
-        for repository in repositories.iter() {
+        self.process_repositories(&repositories, |repository| {
             let mut command = std::process::Command::new(&commands[0]);
             command.args(&commands[1..]);
             command.current_dir(&repository.path);
@@ -375,8 +409,8 @@ impl Multigit {
             if !status.success() {
                 return Err(anyhow!("Failed to execute command"));
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Executes a Git command with optional arguments in the selected repositories.
@@ -392,10 +426,13 @@ impl Multigit {
 
         let divider = "#".repeat(width);
 
-        for (index, repository) in repositories.iter().enumerate() {
-            if index != 0 {
+        let mut first_repository = true;
+
+        self.process_repositories(&repositories, |repository| {
+            if !first_repository {
                 println_markup!(&self.style_sheet, "\n<divider>{}</divider>\n", divider);
             }
+            first_repository = false;
             println_markup!(
                 &self.style_sheet,
                 "Running `<command>{}</command>` in <repository>{}</repository>\n",
@@ -408,8 +445,8 @@ impl Multigit {
             command.args(&args);
             command.current_dir(&repository.path);
             _ = command.status()?; // TODO: Fix status checking
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Commits changes in the selected repositories.
@@ -498,4 +535,9 @@ pub fn noneify<T>(v: &Vec<T>) -> Option<&Vec<T>> {
     } else {
         Some(v)
     }
+}
+
+struct RepositoryError {
+    path: PathBuf,
+    error: anyhow::Error,
 }
