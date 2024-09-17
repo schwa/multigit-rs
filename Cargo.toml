@@ -21,6 +21,7 @@ edit = "0.1.5"
 git2 = "0.19.0"
 inquire = "0.7.5"
 path-absolutize = "3.1.1"
+patharg = "0.4.0"
 serde = { version = "1.0.210", features = ["derive"] }
 shadow-rs = "0.35.0"
 shell-words = "1.1.0"

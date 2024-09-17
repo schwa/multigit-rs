@@ -11,9 +11,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use walkdir::WalkDir;
+use patharg::InputArg;
+use std::io::{Read};
+
 
 /// Represents an entry for a single Git repository.
 #[derive(Debug, Deserialize, Serialize)]
@@ -78,21 +82,32 @@ pub struct Config {
 }
 
 impl Config {
-    /// Loads the configuration from the default config file.
-    pub fn load() -> Result<Self> {
-        let config_path = "~/.config/multigit/config.toml";
-        let config_path = shellexpand::tilde(config_path);
-        let config_path = PathBuf::from(config_path.to_string());
 
-        match fs::read_to_string(config_path) {
-            Ok(config_content) => toml::from_str(&config_content)
-                .map_err(|e| anyhow!("Failed to parse config: {}", e)),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                println!("Config file not found. Using default configuration.");
-                anyhow::Ok(Config::default())
+
+
+
+    /// Loads the configuration from the default config file.
+    pub fn load(path: InputArg) -> Result<Self> {
+
+        let content = match path {
+            InputArg::Stdin => {
+                let mut buffer = String::new();
+                io::stdin().read_to_string(&mut buffer)?;
+                buffer
             }
-            Err(e) => Err(anyhow!("Failed to read config file: {}", e)),
-        }
+            InputArg::Path(path) => {
+                let expanded_path = shellexpand::tilde(path.to_str().unwrap());
+                let config_path = PathBuf::from(expanded_path.to_string());
+                fs::read_to_string(config_path).map_err(|e| anyhow!("Failed to read config file: {}", e))?
+            }
+        };
+
+        toml::from_str(&content)
+            .map_err(|e| anyhow!("Failed to parse config: {}", e))
+            .or_else(|e| {
+                println!("Failed to load config: {}. Using default configuration.", e);
+                Ok(Config::default())
+            })
     }
 
     /// Saves the current configuration to the default config file.
@@ -154,8 +169,7 @@ pub struct Multigit {
 
 impl Multigit {
     /// Creates a new instance of `Multigit`.
-    pub fn new() -> Result<Self> {
-        let config = Config::load()?;
+    pub fn new(config: Config) -> Result<Self> {
 
         let style_sheet = StyleSheet::parse(
             "

@@ -10,6 +10,7 @@ use multigit::*;
 use shadow_rs::shadow;
 use std::io;
 use std::path::PathBuf;
+use patharg::InputArg;
 
 shadow!(build);
 
@@ -21,6 +22,9 @@ shadow!(build);
 #[clap(about = "A multi-command CLI example", long_about = None)]
 struct Cli {
 
+    #[arg(short, long)]
+    #[clap(default_value = "~/.config/multigit/config.toml")]
+    config: InputArg,
 
     /// The subcommand to execute.
     #[clap(subcommand)]
@@ -138,8 +142,10 @@ fn main() -> Result<()> {
     // Parse command-line arguments into the `Cli` struct.
     let cli = Cli::parse();
 
+    let config = Config::load(cli.config)?;
+
     // Create a new instance of `Multigit`.
-    let mut multigit = Multigit::new().unwrap();
+    let mut multigit = Multigit::new(config).unwrap();
 
     // Match the provided command and execute the corresponding action.
     match &cli.command {
