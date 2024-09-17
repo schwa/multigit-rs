@@ -6,7 +6,7 @@
 use anyhow::{anyhow, Context, Result};
 use colored_markup::{println_markup, StyleSheet};
 use inquire::Confirm;
-use path_absolutize::*;
+use path_absolutize::Absolutize;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
