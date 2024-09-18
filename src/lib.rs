@@ -11,11 +11,13 @@ use patharg::InputArg;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::env;
+use std::fmt;
 use std::fs;
 use std::io;
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::{Display, Path, PathBuf};
 use std::process::Command;
+use tabled::{Table, Tabled};
 use walkdir::WalkDir;
 
 /// Represents an entry for a single Git repository.
@@ -23,6 +25,48 @@ use walkdir::WalkDir;
 pub struct RepositoryEntry {
     /// The path to the repository.
     pub path: PathBuf,
+}
+
+impl RepositoryEntry {
+    fn current_branch(&self) -> Result<String> {
+        let repo = git2::Repository::open(&self.path)?;
+        let head = repo.head()?;
+        let branch = head.shorthand().unwrap();
+        Ok(branch.to_string())
+    }
+
+    fn behind_remote(&self) -> Result<Option<bool>> {
+        let repo = git2::Repository::open(&self.path)?;
+        let head = repo.head()?;
+        let branch = head.shorthand().unwrap();
+        let branch = repo.find_branch(branch, git2::BranchType::Local)?;
+        if branch.upstream().is_err() {
+            return Ok(None);
+        }
+        let upstream = branch.upstream()?;
+        let (_, behind) = repo.graph_ahead_behind(
+            branch.get().target().unwrap(),
+            upstream.get().target().unwrap(),
+        )?;
+        Ok(Some(behind > 0))
+    }
+
+    fn ahead_remote(&self) -> Result<Option<bool>> {
+        let repo = git2::Repository::open(&self.path)?;
+        let head = repo.head()?;
+        let branch = head.shorthand().unwrap();
+        let branch = repo.find_branch(branch, git2::BranchType::Local)?;
+        // if no upstream is set, return None
+        if branch.upstream().is_err() {
+            return Ok(None);
+        }
+        let upstream = branch.upstream()?;
+        let (ahead, _) = repo.graph_ahead_behind(
+            branch.get().target().unwrap(),
+            upstream.get().target().unwrap(),
+        )?;
+        Ok(Some(ahead > 0))
+    }
 }
 
 /// Represents an entry for a directory containing Git repositories.
@@ -65,6 +109,11 @@ impl RepositoryEntry {
             }
         }
         anyhow::Ok(state)
+    }
+
+    fn is_dirty(&self) -> bool {
+        let state = self.state().unwrap();
+        state.entries.contains(&EntryState::Dirty)
     }
 }
 
@@ -219,6 +268,14 @@ impl Multigit {
         anyhow::Ok(repositories)
     }
 
+    fn iter_repositories(
+        &self,
+        filter: Option<&Vec<Filter>>,
+    ) -> Result<impl Iterator<Item = RepositoryEntry>> {
+        let repositories = self.all_repositories(filter)?;
+        Ok(repositories.into_iter())
+    }
+
     fn process_repositories<F>(
         &self,
         repositories: &[RepositoryEntry],
@@ -286,19 +343,51 @@ impl Multigit {
     }
 
     /// Lists all registered repositories.
-    pub fn list(&self, filter: Option<&Vec<Filter>>) -> Result<()> {
+    pub fn list(&self, filter: Option<&Vec<Filter>>, detailed: &bool) -> Result<()> {
         let repositories = self.all_repositories(filter)?;
-        self.process_repositories(&repositories, |repository| {
-            println_markup!(
-                &self.style_sheet,
-                "<repository>{}</repository>",
-                repository
-                    .path
-                    .to_str()
-                    .ok_or_else(|| anyhow!("Invalid path"))?
-            );
-            anyhow::Ok(())
-        })
+
+        #[derive(Tabled)]
+        struct Row<'a> {
+            name: String,
+            #[tabled(skip)]
+            path: Display<'a>,
+            state: RepositoryState,
+            current_branch: String,
+            #[tabled(display_with = "display_option")]
+            behind_remote: Option<bool>,
+            #[tabled(display_with = "display_option")]
+            ahead_remote: Option<bool>,
+        }
+
+        let rows = repositories.iter().map(|repository| {
+            let name = repository
+                .path
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+            let path = repository.path.display();
+            Row {
+                name,
+                path,
+                state: repository.state().unwrap(),
+                current_branch: repository.current_branch().unwrap(),
+                behind_remote: repository.behind_remote().ok().flatten(),
+                ahead_remote: repository.ahead_remote().ok().flatten(),
+            }
+        });
+
+        if !detailed {
+            for row in rows {
+                println_markup!(&self.style_sheet, "<repository>{}</repository>", row.path);
+            }
+        } else {
+            let table = Table::new(rows).to_string();
+            println!("{}", table);
+        }
+
+        Ok(())
     }
 
     /// Shows the status of all repositories.
@@ -497,6 +586,11 @@ impl Multigit {
         self.git_command("pull", filter, passthrough)
     }
 
+    /// Fetchs changes from remote repositories.
+    pub fn fetch(&self, filter: Option<&Vec<Filter>>, passthrough: &[String]) -> Result<()> {
+        self.git_command("fetch", filter, passthrough)
+    }
+
     pub fn config(&self) -> Result<()> {
         let editor = env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
         let config_path = "~/.config/multigit/config.toml";
@@ -583,4 +677,30 @@ pub fn noneify<T>(v: &Vec<T>) -> Option<&Vec<T>> {
 struct RepositoryError {
     path: PathBuf,
     error: anyhow::Error,
+}
+
+impl fmt::Display for EntryState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            EntryState::Dirty => write!(f, "Dirty"),
+        }
+    }
+}
+
+impl fmt::Display for RepositoryState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.entries.is_empty() {
+            write!(f, "Clean")
+        } else {
+            let states: Vec<String> = self.entries.iter().map(|state| state.to_string()).collect();
+            write!(f, "{}", states.join(", "))
+        }
+    }
+}
+
+fn display_option(o: &Option<bool>) -> String {
+    match o {
+        Some(s) => format!("{}", s),
+        None => "".to_string(),
+    }
 }

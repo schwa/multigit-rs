@@ -8,6 +8,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use multigit::*;
 use patharg::InputArg;
+use serde::de;
 use shadow_rs::shadow;
 use std::io;
 use std::path::PathBuf;
@@ -60,6 +61,10 @@ enum Commands {
         /// Filters to select specific repositories.
         #[arg(short, long)]
         filter: Vec<Filter>,
+
+        #[arg(short, long)]
+        #[clap(default_value = "false")]
+        detailed: bool,
     },
 
     /// Add files to the staging area in the selected repositories.
@@ -91,6 +96,17 @@ enum Commands {
         #[clap(trailing_var_arg = true, allow_hyphen_values = true)]
         passthrough: Vec<String>,
     },
+    /// Fetch changes from remote repositories.
+    Fetch {
+        /// Filters to select specific repositories.
+        #[arg(short, long)]
+        filter: Vec<Filter>,
+
+        /// Additional arguments to pass through to the `git fetch` command.
+        #[clap(trailing_var_arg = true, allow_hyphen_values = true)]
+        passthrough: Vec<String>,
+    },
+
     /// Pull changes from remote repositories.
     Pull {
         /// Filters to select specific repositories.
@@ -144,7 +160,7 @@ fn main() -> Result<()> {
 
     // Match the provided command and execute the corresponding action.
     match &cli.command {
-        Commands::List { filter } => multigit.list(noneify(filter)),
+        Commands::List { filter, detailed } => multigit.list(noneify(filter), detailed),
         Commands::Register { paths } => multigit.register(paths),
         Commands::Status { filter } => multigit.status(noneify(filter)),
         Commands::Unregister { paths, all } => multigit.unregister(paths, all),
@@ -166,6 +182,10 @@ fn main() -> Result<()> {
             filter,
             passthrough,
         } => multigit.pull(noneify(filter), passthrough),
+        Commands::Fetch {
+            filter,
+            passthrough,
+        } => multigit.fetch(noneify(filter), passthrough),
         Commands::Config {} => multigit.config(),
         Commands::Completions { shell } => {
             let shell: Shell = shell.parse().unwrap_or(Shell::Bash);
