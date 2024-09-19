@@ -22,9 +22,14 @@ shadow!(build);
 #[clap(version = build::PKG_VERSION)]
 #[clap(about = "A multi-command CLI example", long_about = None)]
 struct Cli {
+    /// The configuration file to use.
     #[arg(short, long)]
     #[clap(default_value = "~/.config/multigit/config.toml")]
     config: InputArg,
+
+    /// Directory to use instead of registering directories/repositories.
+    #[arg(short, long)]
+    directory: Option<PathBuf>,
 
     /// The subcommand to execute.
     #[clap(subcommand)]
@@ -156,7 +161,7 @@ fn main() -> Result<()> {
     let config = Config::load(cli.config)?;
 
     // Create a new instance of `Multigit`.
-    let mut multigit = Multigit::new(config).unwrap();
+    let mut multigit = Multigit::new(config, cli.directory).unwrap();
 
     // Match the provided command and execute the corresponding action.
     match &cli.command {

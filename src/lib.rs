@@ -71,7 +71,10 @@ impl RepositoryEntry {
     fn has_stashes(&self) -> Result<bool> {
         let mut repo = git2::Repository::open(&self.path)?;
         let mut has_stashes = false;
-        repo.stash_foreach(|_, _, _| { has_stashes = true; false })?;
+        repo.stash_foreach(|_, _, _| {
+            has_stashes = true;
+            false
+        })?;
         Ok(has_stashes)
     }
 }
@@ -214,13 +217,16 @@ impl Config {
 pub struct Multigit {
     /// The configuration containing repositories and directories.
     pub config: Config,
+
+    pub directory: Option<PathBuf>,
+
     /// The stylesheet used for colored output.
     pub style_sheet: StyleSheet<'static>,
 }
 
 impl Multigit {
     /// Creates a new instance of `Multigit`.
-    pub fn new(config: Config) -> Result<Self> {
+    pub fn new(config: Config, directory: Option<PathBuf>) -> Result<Self> {
         let style_sheet = StyleSheet::parse(
             "
             repository { foreground: cyan; }
@@ -232,24 +238,37 @@ impl Multigit {
         .unwrap();
 
         anyhow::Ok(Self {
-            config,
-            style_sheet,
+            config: config,
+            directory: directory,
+            style_sheet: style_sheet,
         })
     }
 
     /// Retrieves all repositories, optionally filtering them.
     fn all_repositories(&self, filter: Option<&Vec<Filter>>) -> Result<Vec<RepositoryEntry>> {
         let mut repositories: Vec<RepositoryEntry> = Vec::new();
-        for (_, repository) in self.config.repositories.iter() {
-            repositories.push(RepositoryEntry {
-                path: repository.path.clone(),
-            });
-        }
-        for (_, directory) in self.config.directories.iter() {
-            let directory_repositories = find_repositories(&directory.path)?;
+
+        if self.directory != None {
+            let directory = self.directory.as_ref().unwrap();
+            let directory_repositories = find_repositories(&directory)?;
+            let mut repositories: Vec<RepositoryEntry> = Vec::new();
             for repository in directory_repositories {
                 let repository = RepositoryEntry { path: repository };
                 repositories.push(repository);
+            }
+            return Ok(repositories);
+        } else {
+            for (_, repository) in self.config.repositories.iter() {
+                repositories.push(RepositoryEntry {
+                    path: repository.path.clone(),
+                });
+            }
+            for (_, directory) in self.config.directories.iter() {
+                let directory_repositories = find_repositories(&directory.path)?;
+                for repository in directory_repositories {
+                    let repository = RepositoryEntry { path: repository };
+                    repositories.push(repository);
+                }
             }
         }
 
