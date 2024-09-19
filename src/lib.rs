@@ -121,6 +121,7 @@ impl RepositoryEntry {
         anyhow::Ok(state)
     }
 
+    #[allow(dead_code)]
     fn is_dirty(&self) -> bool {
         let state = self.state().unwrap();
         state.entries.contains(&EntryState::Dirty)
@@ -238,9 +239,9 @@ impl Multigit {
         .unwrap();
 
         anyhow::Ok(Self {
-            config: config,
-            directory: directory,
-            style_sheet: style_sheet,
+            config,
+            directory,
+            style_sheet,
         })
     }
 
@@ -248,9 +249,9 @@ impl Multigit {
     fn all_repositories(&self, filter: Option<&Vec<Filter>>) -> Result<Vec<RepositoryEntry>> {
         let mut repositories: Vec<RepositoryEntry> = Vec::new();
 
-        if self.directory != None {
+        if self.directory.is_some() {
             let directory = self.directory.as_ref().unwrap();
-            let directory_repositories = find_repositories(&directory)?;
+            let directory_repositories = find_repositories(directory)?;
             let mut repositories: Vec<RepositoryEntry> = Vec::new();
             for repository in directory_repositories {
                 let repository = RepositoryEntry { path: repository };
@@ -294,6 +295,7 @@ impl Multigit {
         anyhow::Ok(repositories)
     }
 
+    #[allow(dead_code)]
     fn iter_repositories(
         &self,
         filter: Option<&Vec<Filter>>,
