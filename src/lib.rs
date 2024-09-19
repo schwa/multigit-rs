@@ -67,6 +67,13 @@ impl RepositoryEntry {
         )?;
         Ok(Some(ahead > 0))
     }
+
+    fn has_stashes(&self) -> Result<bool> {
+        let mut repo = git2::Repository::open(&self.path)?;
+        let mut has_stashes = false;
+        repo.stash_foreach(|_, _, _| { has_stashes = true; false })?;
+        Ok(has_stashes)
+    }
 }
 
 /// Represents an entry for a directory containing Git repositories.
@@ -357,6 +364,7 @@ impl Multigit {
             behind_remote: Option<bool>,
             #[tabled(display_with = "display_option")]
             ahead_remote: Option<bool>,
+            has_stashes: bool,
         }
 
         let rows = repositories.iter().map(|repository| {
@@ -375,6 +383,7 @@ impl Multigit {
                 current_branch: repository.current_branch().unwrap(),
                 behind_remote: repository.behind_remote().ok().flatten(),
                 ahead_remote: repository.ahead_remote().ok().flatten(),
+                has_stashes: repository.has_stashes().unwrap(),
             }
         });
 
