@@ -14,6 +14,7 @@ build = "build.rs"
 
 [dependencies]
 anyhow = "1.0.87"
+better-panic = "0.3.0"
 clap = { version = "4.5.17", features = ["derive"] }
 clap_complete = "4.5.26"
 colored_markup = "0.1.1"

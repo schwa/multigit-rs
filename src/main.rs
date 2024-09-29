@@ -154,6 +154,8 @@ enum Commands {
 
 /// The main entry point of the program.
 fn main() -> Result<()> {
+    better_panic::install();
+
     // Parse command-line arguments into the `Cli` struct.
     let cli = Cli::parse();
 
