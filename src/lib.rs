@@ -35,6 +35,19 @@ impl RepositoryEntry {
         Ok(branch.to_string())
     }
 
+    fn has_tracking_branch(&self) -> Result<bool, git2::Error> {
+        let repo = git2::Repository::open(&self.path)?;
+        let has_upstream = repo
+            .head()
+            .ok()
+            .and_then(|head| head.shorthand().map(|s| s.to_owned()))
+            .and_then(|branch_name| repo.find_branch(&branch_name, git2::BranchType::Local).ok())
+            .map(|branch| branch.upstream().is_ok())
+            .unwrap_or(false);
+
+        Ok(has_upstream)
+    }
+
     fn behind_remote(&self) -> Result<Option<bool>> {
         let repo = git2::Repository::open(&self.path)?;
         let head = repo.head()?;
@@ -276,21 +289,29 @@ impl Multigit {
         if let Some(filter) = filter {
             if !filter.is_empty() {
                 repositories.retain(|repository| {
-                    let state = repository.state().unwrap();
                     for f in filter {
                         match f {
                             Filter::Dirty => {
-                                if state.entries.contains(&EntryState::Dirty) {
+                                if repository
+                                    .state()
+                                    .unwrap()
+                                    .entries
+                                    .contains(&EntryState::Dirty)
+                                {
+                                    return true;
+                                }
+                            }
+                            Filter::Tracking => {
+                                if repository.has_tracking_branch().unwrap() {
                                     return true;
                                 }
                             }
                         }
                     }
-                    false
+                    return false;
                 });
             }
         }
-
         repositories.sort_by(|a, b| a.path.cmp(&b.path));
         anyhow::Ok(repositories)
     }
@@ -552,11 +573,9 @@ impl Multigit {
     pub fn git_command(
         &self,
         git_command: &str,
-        filter: Option<&Vec<Filter>>,
+        repositories: &[RepositoryEntry],
         passthrough: &[String],
     ) -> Result<()> {
-        let repositories = self.all_repositories(filter)?;
-
         let width = termsize::get().unwrap().cols as usize;
 
         let divider = "#".repeat(width);
@@ -598,27 +617,39 @@ impl Multigit {
 
     /// Commits changes in the selected repositories.
     pub fn commit(&self, filter: Option<&Vec<Filter>>, passthrough: &[String]) -> Result<()> {
-        self.git_command("commit", filter, passthrough)
+        let repositories = self.all_repositories(filter)?;
+        self.git_command("commit", &repositories, passthrough)
     }
 
     /// Adds files to the staging area in the selected repositories.
     pub fn add(&self, filter: Option<&Vec<Filter>>, passthrough: &[String]) -> Result<()> {
-        self.git_command("add", filter, passthrough)
+        let repositories = self.all_repositories(filter)?;
+        self.git_command("add", &repositories, passthrough)
     }
 
     /// Pushes changes to remote repositories.
     pub fn push(&self, filter: Option<&Vec<Filter>>, passthrough: &[String]) -> Result<()> {
-        self.git_command("push", filter, passthrough)
+        let repositories = self.all_repositories(filter)?;
+
+        self.git_command("push", &repositories, passthrough)
     }
 
     /// Pulls changes from remote repositories.
     pub fn pull(&self, filter: Option<&Vec<Filter>>, passthrough: &[String]) -> Result<()> {
-        self.git_command("pull", filter, passthrough)
+        let repositories = self
+            .all_repositories(filter)?
+            .into_iter()
+            .filter(|repo| repo.has_tracking_branch().unwrap())
+            .collect::<Vec<RepositoryEntry>>();
+        // let repositories = self.all_repositories(filter)?;
+
+        self.git_command("pull", &repositories, passthrough)
     }
 
     /// Fetchs changes from remote repositories.
     pub fn fetch(&self, filter: Option<&Vec<Filter>>, passthrough: &[String]) -> Result<()> {
-        self.git_command("fetch", filter, passthrough)
+        let repositories = self.all_repositories(filter)?;
+        self.git_command("fetch", &repositories, passthrough)
     }
 
     pub fn config(&self) -> Result<()> {
@@ -641,6 +672,8 @@ impl Multigit {
 pub enum Filter {
     /// Filter repositories that have uncommitted changes.
     Dirty,
+    /// Filter where current branch is tracking remote
+    Tracking,
 }
 
 /// Enum representing the state of repository entries.
