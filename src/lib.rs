@@ -20,7 +20,10 @@ use std::path::{Display, Path, PathBuf};
 use std::process::Command;
 use std::time::SystemTime;
 use tabled::{Table, Tabled};
-use walkdir::WalkDir;
+//use walkdir::WalkDir;
+use async_walkdir::{Filtering, WalkDir};
+use futures_lite::future::block_on;
+use futures_lite::stream::StreamExt;
 
 /// Represents an entry for a single Git repository.
 #[derive(Debug, Deserialize, Serialize)]
@@ -726,18 +729,38 @@ pub fn open_in_git_ui(path: &Path) -> Result<()> {
 
 /// Finds all Git repositories within a given path.
 pub fn find_repositories(path: &Path) -> Result<Vec<PathBuf>> {
-    let mut repositories = Vec::new();
-    let walker = WalkDir::new(path).into_iter().filter_entry(|e| {
-        e.file_type().is_dir() && !is_hidden(e.path()) && e.path().file_name().unwrap() != ".git"
-    });
-    for entry in walker {
-        let entry = entry?;
-        if is_git_repository(entry.path()) {
-            let path = entry.path();
-            repositories.push(path.to_path_buf());
+    let paths = block_on(async {
+        let mut entries = WalkDir::new(path).filter(|e| async move {
+            if !e.file_type().await.unwrap().is_dir() {
+                return Filtering::Ignore;
+            }
+            if let Some(true) = e
+                .path()
+                .file_name()
+                .map(|f| f.to_string_lossy().starts_with('.'))
+            {
+                return Filtering::IgnoreDir;
+            }
+            if e.path().join("../.git").exists() && e.path().file_name().unwrap() != ".git" {
+                return Filtering::IgnoreDir;
+            }
+
+            Filtering::Continue
+        });
+
+        // return vec of paths.
+        let mut paths = Vec::new();
+        while let Some(entry) = entries.next().await {
+            let path = entry.unwrap().path().to_path_buf();
+            // println!("{:?}", &path);
+            paths.push(path);
         }
-    }
-    Ok(repositories)
+        // Sort paths
+        paths.sort();
+
+        paths
+    });
+    Ok(paths)
 }
 
 /// Checks if a path is a Git repository.
