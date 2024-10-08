@@ -11,6 +11,8 @@ use patharg::InputArg;
 use shadow_rs::shadow;
 use std::io;
 use std::path::PathBuf;
+use std::time::SystemTime;
+use clap_verbosity_flag::{Verbosity, WarnLevel};
 
 shadow!(build);
 
@@ -20,6 +22,8 @@ shadow!(build);
 #[clap(author = "Jonathan Wight")]
 #[clap(version = build::PKG_VERSION)]
 #[clap(about = "A multi-command CLI example", long_about = None)]
+#[derive(Debug)]
+
 struct Cli {
     /// The configuration file to use.
     #[arg(short, long)]
@@ -30,6 +34,10 @@ struct Cli {
     #[arg(short, long)]
     directory: Option<PathBuf>,
 
+    /// Set the log level.
+    #[clap(flatten)]
+    verbose: Verbosity<WarnLevel>,
+
     /// The subcommand to execute.
     #[clap(subcommand)]
     command: Commands,
@@ -37,6 +45,8 @@ struct Cli {
 
 /// Enum representing the possible commands.
 #[derive(Subcommand)]
+#[derive(Debug)]
+
 enum Commands {
     /// Register git repositories or directories of git repositories.
     ///
@@ -156,16 +166,26 @@ enum Commands {
 fn main() -> Result<()> {
     better_panic::install();
 
-    // Parse command-line arguments into the `Cli` struct.
-    let cli = Cli::parse();
+    let start_time = SystemTime::now();
 
-    let config = Config::load(cli.config)?;
+    // Parse command-line arguments into the `Cli` struct.
+    let args = Cli::parse();
+
+    setup_logger(
+        args.verbose.log_level_filter(),
+        // &args.export_log,
+        start_time,
+    )?;
+
+    log::debug!("{:?}", args);
+
+    let config = Config::load(args.config)?;
 
     // Create a new instance of `Multigit`.
-    let mut multigit = Multigit::new(config, cli.directory).unwrap();
+    let mut multigit = Multigit::new(config, args.directory).unwrap();
 
     // Match the provided command and execute the corresponding action.
-    match &cli.command {
+    match &args.command {
         Commands::List { filter, detailed } => multigit.list(noneify(filter), detailed),
         Commands::Register { paths } => multigit.register(paths),
         Commands::Status { filter } => multigit.status(noneify(filter)),

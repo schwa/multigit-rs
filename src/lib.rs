@@ -19,6 +19,8 @@ use std::path::{Display, Path, PathBuf};
 use std::process::Command;
 use tabled::{Table, Tabled};
 use walkdir::WalkDir;
+use fern::colors::{Color, ColoredLevelConfig};
+use std::time::SystemTime;
 
 /// Represents an entry for a single Git repository.
 #[derive(Debug, Deserialize, Serialize)]
@@ -156,6 +158,17 @@ pub struct Config {
 impl Config {
     /// Loads the configuration from the default config file.
     pub fn load(path: InputArg) -> Result<Self> {
+        log::debug!("{:?}", path);
+        // if file at path is missing, return default config
+        if let InputArg::Path(path) = &path {
+            let expanded_path = shellexpand::tilde(path.to_str().unwrap());
+            let path = PathBuf::from(expanded_path.to_string());
+            if !path.exists() {
+                log::info!("Config file not found at '{:?}'. Using default configuration.", path);
+                return Ok(Config::default());
+            }
+        }
+
         let content = match path {
             InputArg::Stdin => {
                 let mut buffer = String::new();
@@ -172,8 +185,7 @@ impl Config {
 
         toml::from_str(&content)
             .map_err(|e| anyhow!("Failed to parse config: {}", e))
-            .or_else(|e| {
-                println!("Failed to load config: {}. Using default configuration.", e);
+            .or_else(|_| {
                 Ok(Config::default())
             })
     }
@@ -181,6 +193,14 @@ impl Config {
     /// Saves the current configuration to the default config file.
     pub fn save(&self) -> Result<()> {
         let config_path = "~/.config/multigit/config.toml";
+        // if file doesn't exist, create it and intermediate paths
+        if let Ok(path) = shellexpand::tilde(config_path).to_string().parse::<PathBuf>() {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+        }
+
+
         let config_path = shellexpand::tilde(config_path);
         let config_path = config_path.to_string();
         let config_content = toml::to_string(&self)?;
@@ -766,4 +786,49 @@ fn display_option(o: &Option<bool>) -> String {
         Some(s) => format!("{}", s),
         None => "".to_string(),
     }
+}
+
+pub fn setup_logger(
+    level_filter: log::LevelFilter,
+    //log_path: &Option<PathBuf>,
+    start_time: SystemTime,
+) -> Result<()> {
+    let colors = ColoredLevelConfig::new()
+        .info(Color::Green)
+        .debug(Color::Magenta);
+    let mut base_logger = fern::Dispatch::new();
+    let console_logger = fern::Dispatch::new()
+        .level(level_filter)
+        .format(move |out, message, record| {
+            let duration = SystemTime::now().duration_since(start_time).unwrap();
+            let duration_string = format!("{:10.3}", duration.as_secs_f64());
+            out.finish(format_args!(
+                "{} {:8.8} {:24.24} | {}",
+                duration_string,
+                colors.color(record.level()),
+                record.target(),
+                message
+            ))
+        })
+        .chain(std::io::stdout());
+    base_logger = base_logger.chain(console_logger);
+
+    // if let Some(log_path) = log_path {
+    //     let file_logger = fern::Dispatch::new()
+    //         .format(move |out, message, record| {
+    //             out.finish(format_args!(
+    //                 "[{} {} {}] {}",
+    //                 humantime::format_rfc3339_seconds(SystemTime::now()),
+    //                 record.level(),
+    //                 record.target(),
+    //                 message
+    //             ))
+    //         })
+    //         .chain(fern::log_file(log_path)?);
+    //     base_logger = base_logger.chain(file_logger);
+    // }
+
+    base_logger.apply()?;
+
+    Ok(())
 }
