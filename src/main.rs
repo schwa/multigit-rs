@@ -6,13 +6,13 @@
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
+use clap_verbosity_flag::{Verbosity, WarnLevel};
 use multigit::*;
 use patharg::InputArg;
 use shadow_rs::shadow;
 use std::io;
 use std::path::PathBuf;
 use std::time::SystemTime;
-use clap_verbosity_flag::{Verbosity, WarnLevel};
 
 shadow!(build);
 
@@ -44,8 +44,7 @@ struct Cli {
 }
 
 /// Enum representing the possible commands.
-#[derive(Subcommand)]
-#[derive(Debug)]
+#[derive(Subcommand, Debug)]
 
 enum Commands {
     /// Register git repositories or directories of git repositories.

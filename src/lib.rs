@@ -5,6 +5,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use colored_markup::{println_markup, StyleSheet};
+use fern::colors::{Color, ColoredLevelConfig};
 use inquire::Confirm;
 use path_absolutize::Absolutize;
 use patharg::InputArg;
@@ -17,10 +18,9 @@ use std::io;
 use std::io::Read;
 use std::path::{Display, Path, PathBuf};
 use std::process::Command;
+use std::time::SystemTime;
 use tabled::{Table, Tabled};
 use walkdir::WalkDir;
-use fern::colors::{Color, ColoredLevelConfig};
-use std::time::SystemTime;
 
 /// Represents an entry for a single Git repository.
 #[derive(Debug, Deserialize, Serialize)]
@@ -164,7 +164,10 @@ impl Config {
             let expanded_path = shellexpand::tilde(path.to_str().unwrap());
             let path = PathBuf::from(expanded_path.to_string());
             if !path.exists() {
-                log::info!("Config file not found at '{:?}'. Using default configuration.", path);
+                log::info!(
+                    "Config file not found at '{:?}'. Using default configuration.",
+                    path
+                );
                 return Ok(Config::default());
             }
         }
@@ -185,21 +188,21 @@ impl Config {
 
         toml::from_str(&content)
             .map_err(|e| anyhow!("Failed to parse config: {}", e))
-            .or_else(|_| {
-                Ok(Config::default())
-            })
+            .or_else(|_| Ok(Config::default()))
     }
 
     /// Saves the current configuration to the default config file.
     pub fn save(&self) -> Result<()> {
         let config_path = "~/.config/multigit/config.toml";
         // if file doesn't exist, create it and intermediate paths
-        if let Ok(path) = shellexpand::tilde(config_path).to_string().parse::<PathBuf>() {
+        if let Ok(path) = shellexpand::tilde(config_path)
+            .to_string()
+            .parse::<PathBuf>()
+        {
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent)?;
             }
         }
-
 
         let config_path = shellexpand::tilde(config_path);
         let config_path = config_path.to_string();
@@ -328,7 +331,7 @@ impl Multigit {
                             }
                         }
                     }
-                    return false;
+                    false
                 });
             }
         }
@@ -602,7 +605,7 @@ impl Multigit {
 
         let mut first_repository = true;
 
-        self.process_repositories(&repositories, |repository| {
+        self.process_repositories(repositories, |repository| {
             if !first_repository {
                 println_markup!(&self.style_sheet, "\n<divider>{}</divider>\n", divider);
             }
